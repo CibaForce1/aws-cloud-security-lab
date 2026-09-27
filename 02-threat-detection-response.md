@@ -1,5 +1,7 @@
 # 02 — Automated Threat Detection & Response
 
+![Threat detection and response](images/diagram-threat-detection-response.webp)
+
 ## Goal
 
 Detect a security-group ingress change that opens a service to the internet, preserve audit context and produce a structured finding that drives an incident-response path.

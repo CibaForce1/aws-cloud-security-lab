@@ -1,5 +1,7 @@
 # 01 — Secure Three-Tier AWS Architecture
 
+![Three-tier application architecture](images/diagram-3-tier-architecture.webp)
+
 ## Goal
 
 Build a three-tier AWS application with public ingress at the load balancer while keeping the application and database layers private. The design uses security-group-to-security-group rules, VPC endpoints for private AWS service access, least-privilege IAM and explicit connectivity validation.
