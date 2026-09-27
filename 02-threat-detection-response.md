@@ -1,47 +1,50 @@
 # 02 — Automated Threat Detection & Response
 
 ## Goal
-Detect security-group ingress changes that expose a service to the internet, create an actionable finding and define a response path.
 
-## Diagram
-![Threat detection pipeline](images/diagram-aws-lab-overview.svg)
+Detect a security-group ingress change that opens a service to the internet, preserve enough audit context to identify the actor and produce a structured finding that drives an incident-response path.
 
 ## Build steps
 
 ### 1. Enable CloudTrail logging
-CloudTrail records API activity and delivers the trail logs to the versioned S3 log bucket with log-file validation enabled.
 
-![CloudTrail evidence](images/evidence-cloudtrail-s3-logs.webp)
+Created the `fin-lab-trail` CloudTrail trail and delivered its logs to a versioned S3 bucket with log-file validation enabled.
 
-### 2. Match the security-group API event
-The EventBridge rule matches the EC2 CloudTrail event `AuthorizeSecurityGroupIngress`.
+![CloudTrail logs archived to S3](images/evidence-cloudtrail-s3-logs.webp)
+
+### 2. Match the security-group change event
+
+The EventBridge rule `fin-lab-detect-open-sg` matches EC2 CloudTrail events with detail-type `AWS API Call via CloudTrail` and event name `AuthorizeSecurityGroupIngress`.
 
 ![EventBridge rule](images/evidence-eventbridge-rule.webp)
 
-### 3. Send the event to Lambda
-The matched event invokes `FIN-LAB-Lambda`, which analyzes the security-group rule and writes a structured finding.
+### 3. Invoke the detection Lambda
 
-![Detection build](images/evidence-detection-build.webp)
+The matching event invokes `FIN-LAB-Lambda`. The function evaluates the change and emits a structured finding to CloudWatch Logs.
 
-### 4. Trigger the detection with an exposed test rule
-The test security group was opened to HTTP/80 from `0.0.0.0/0`.
+![Detection finding in CloudWatch Logs](images/evidence-detection-finding.webp)
 
-![Test security group](images/evidence-test-security-group.webp)
+### 4. Prove the detection with a controlled test
 
-### 5. Verify the finding and attribution
-The Lambda produced a HIGH-severity finding. CloudTrail was then used to investigate actor and endpoint context.
+A dedicated lab security group was opened on HTTP/80 to `0.0.0.0/0`. This was the final successful test case because it represented an unmistakable internet-exposure change and triggered the detection path.
 
-![Finding](images/evidence-detection-finding.webp)
+![Controlled open-security-group test](images/evidence-test-security-group.webp)
 
-![CloudTrail attribution](images/evidence-cloudtrail-attribution.webp)
+### 5. Preserve actor and network context
+
+A separate CloudTrail event showed activity through `FIN-LAB-SSM-ROLE`, a private source address (`10.0.11.209`) and an SSM VPC endpoint. Sensitive account/access-key material in the source evidence has been redacted in the repository copy.
+
+![CloudTrail attribution evidence](images/evidence-cloudtrail-attribution.webp)
 
 ## What broke & fix
 
-| Issue | Root cause | Fix / lesson |
-|---|---|---|
-| Initial SSH/22 test produced no finding | The EventBridge Enhanced builder silently failed to save the intended rule. | Rebuilt the rule with the Advanced builder and retested. A detection that has never fired is a hypothesis. |
+The first test used SSH/22 and produced no finding. The EventBridge Enhanced builder had not actually saved the intended rule. The rule was rebuilt with the Advanced builder, then retested with HTTP/80 until the finding appeared.
 
-## Proof
+The lesson is operational: a detection that has never fired under a controlled test is still a hypothesis.
+
+## Observed finding
+
+The resulting record was structured as:
 
 ```json
 {
@@ -49,22 +52,29 @@ The Lambda produced a HIGH-severity finding. CloudTrail was then used to investi
   "severity": "HIGH",
   "group_id": "sg-00ee03ff9ea6eda40",
   "actor": "arn:aws:iam::[REDACTED]:root",
-  "rules": [{"protocol":"tcp","from_port":80,"to_port":80}]
+  "rules": [
+    {"protocol": "tcp", "from_port": 80, "to_port": 80}
+  ]
 }
 ```
 
-**Response runbook**
+The CloudWatch screenshot shows the same finding with the source IP field redacted.
 
-1. **Triage:** Identify the affected resource, actor and approval status.
-2. **Contain:** Revoke unauthorized ingress and preserve the CloudTrail record.
-3. **Escalate:** Investigate root-user activity as a separate finding.
+![CloudWatch finding](images/evidence-detection-finding.webp)
 
-## Lab vs production
+## Response runbook
+
+1. **Triage** — identify the affected resource, actor and whether the change was approved.
+2. **Contain** — revoke unauthorized ingress and preserve the CloudTrail record.
+3. **Escalate** — investigate root-user activity as a separate security finding.
+
+## Next production hardening
+
 | Lab | Production / next step |
 |---|---|
 | Finding recorded in CloudWatch Logs | SNS/Slack notification |
-| Manual containment | Auto-revoke unapproved rules; dry run first |
+| Manual containment | Auto-revoke unapproved rules after a dry run |
 | Basic internet-exposure detection | Tag-based allowlist for legitimate ALB rules |
 | `AuthorizeSecurityGroupIngress` coverage | Add `ModifySecurityGroupRules` and IPv6 `::/0` |
-| CloudTrail + custom Lambda detection | Add GuardDuty, AWS Config and Security Hub |
-| Security-group test scenario | Extend testing to PDF uploads with GuardDuty Malware Protection, quarantine and alerting |
+| CloudTrail + custom Lambda | Add GuardDuty, AWS Config and Security Hub |
+| Security-group test case | Extend to S3 upload malware scanning and quarantine |
