@@ -15,17 +15,27 @@ A hands-on AWS security lab built manually in the AWS Console. The lab demonstra
 
 ### Architecture diagrams
 
-#### 1. AWS Lab Overview
-Color/icon-rich overview of the secure application architecture and the threat-detection path.
+#### 1. Secure Three-Tier Architecture
+Traffic path from the internet through the public ALB to the private application tier, with private access to RDS, S3 and AWS services through VPC endpoints.
 
-![AWS lab overview](images/diagram-aws-lab-overview.webp)
+![Secure three-tier architecture](images/diagram-architecture.png)
 
-#### 2. VPC Topology
-Color/icon-rich view of the VPC, subnet tiers, route boundaries, security groups and private AWS service access.
+#### 2. Threat Detection Pipeline
+CloudTrail, EventBridge, Lambda and CloudWatch Logs detection path, ending in the response runbook.
 
-![VPC topology](images/diagram-vpc-topology.webp)
+![Threat detection pipeline](images/diagram-detection.png)
 
-#### 3. Three-Tier Application
-Color/icon-rich application-flow view showing the public ALB, private application tier, private database tier and endpoint paths.
+#### 3. AWS Lab Overview
+Secure application architecture alongside the threat-detection path.
 
-![Three-tier application](images/diagram-3-tier-application.webp)
+![AWS lab overview](images/diagram-aws-lab-overview.svg)
+
+#### 4. VPC Topology
+VPC, subnet tiers, route boundaries, security groups and private AWS service access.
+
+![VPC topology](images/diagram-vpc-topology.svg)
+
+#### 5. Three-Tier Application
+Public ALB, private application tier, private database tier and endpoint paths.
+
+![Three-tier application](images/diagram-3-tier-application.svg)

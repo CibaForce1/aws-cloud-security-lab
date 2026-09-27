@@ -16,7 +16,7 @@ Created the `fin-lab-trail` CloudTrail trail and delivered its logs to a version
 
 The EventBridge rule `fin-lab-detect-open-sg` matches EC2 CloudTrail events with detail-type `AWS API Call via CloudTrail` and event name `AuthorizeSecurityGroupIngress`.
 
-![EventBridge rule](images/evidence-eventbridge-rule.webp)
+![EventBridge rule](images/evidence-eventbridge-rule.png)
 
 ### 3. Invoke the detection Lambda
 
@@ -28,13 +28,13 @@ The matching event invokes `FIN-LAB-Lambda`, which evaluates the change and emit
 
 A dedicated lab security group was opened on HTTP/80 to `0.0.0.0/0`. This was the final successful test case.
 
-![Controlled open-security-group test](images/evidence-test-security-group.webp)
+![Controlled open-security-group test](images/evidence-test-security-group.png)
 
 ### 5. Preserve actor and network context
 
 A CloudTrail event showed activity through `FIN-LAB-SSM-ROLE`, a private source address (`10.0.11.209`) and an SSM VPC endpoint. Sensitive account/access-key material was redacted from the evidence copy.
 
-![CloudTrail attribution evidence](images/evidence-cloudtrail-attribution.webp)
+![CloudTrail attribution evidence](images/evidence-cloudtrail-attribution.png)
 
 ## What broke & fix
 

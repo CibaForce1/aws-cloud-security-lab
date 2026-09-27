@@ -10,25 +10,25 @@ Build a three-tier AWS application with public ingress at the load balancer whil
 
 Created `FIN-LAB-VPC` (`10.0.0.0/16`) across `us-east-1a` and `us-east-1b` with two public, two private-application and two private-database subnets. Only the public route table has `0.0.0.0/0` to `FIN-LAB-igw`; no NAT gateway is used.
 
-![VPC resource map](images/evidence-vpc-resource-map.webp)
+![VPC resource map](images/evidence-vpc-resource-map.png)
 
 ### 2. Keep the application instance private
 
 `FIN-LAB-APP-Private` has no public IPv4 address, no key pair, IMDSv2 required and the `FIN-LAB-SSM-ROLE` role. It is managed through Systems Manager rather than SSH.
 
-![Private EC2 configuration](images/evidence-private-ec2.webp)
+![Private EC2 configuration](images/evidence-private-ec2.png)
 
 ### 3. Provide private AWS service access
 
 VPC interface endpoints were used for SSM and Secrets Manager, with endpoint access restricted to HTTPS from the application security group. S3 uses a gateway endpoint. Validation showed direct internet and EC2 API access blocked while the intended private service paths were open.
 
-![Private endpoint and network validation](images/evidence-network-validation.webp)
+![Private endpoint and network validation](images/evidence-network-validation.png)
 
 ### 4. Expose only the load balancer publicly
 
 The internet-facing ALB listens on HTTP/80 and forwards to `fin-lab-app-tg` on port `8080`. The application security group allows `8080` only from the ALB security group. The backend Python service is kept on the private instance.
 
-![ALB successfully serving the private application](images/evidence-alb-app-proof.webp)
+![ALB successfully serving the private application](images/evidence-alb-app-proof.png)
 
 ### 5. Keep the database private
 
@@ -46,7 +46,11 @@ The S3 bucket has Block Public Access and bucket-policy controls for TLS and upl
 
 Reachability Analyzer showed `app-to-db-3306` **Reachable** and `igw-to-app-22` **Not reachable**. Instance-side validation showed the intended blocked and allowed paths.
 
-![Reachability Analyzer validation](images/evidence-reachability-summary.webp)
+![Reachability Analyzer validation](images/evidence-reachability-summary.png)
+
+The `app-to-db-3306` path detail shows it passing the network ACL and the `FIN-LAB-DB-SG` rule, which allows `3306` only from the application security group.
+
+![Reachability Analyzer app-to-db path detail](images/evidence-reachability-path-detail.png)
 
 ## What broke & fix
 
