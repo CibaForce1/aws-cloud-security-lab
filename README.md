@@ -18,14 +18,14 @@ A hands-on AWS security lab built manually in the AWS Console. The lab demonstra
 #### 1. AWS Lab Overview
 Color/icon-rich overview of the secure application architecture and the threat-detection path.
 
-![AWS lab overview](images/diagram-aws-lab-overview.svg)
+![AWS lab overview](images/diagram-aws-lab-overview.webp)
 
 #### 2. VPC Topology
 Color/icon-rich view of the VPC, subnet tiers, route boundaries, security groups and private AWS service access.
 
-![VPC topology](images/diagram-vpc-topology.svg)
+![VPC topology](images/diagram-vpc-topology.webp)
 
 #### 3. Three-Tier Application
 Color/icon-rich application-flow view showing the public ALB, private application tier, private database tier and endpoint paths.
 
-![Three-tier application](images/diagram-3-tier-application.svg)
+![Three-tier application](images/diagram-3-tier-application.webp)
