@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="520" viewBox="0 0 1200 520">
+<style>text{font-family:Arial,sans-serif;fill:#111} .box{fill:#fff;stroke:#333;stroke-width:2;rx:10} .zone{fill:#f7f7f7;stroke:#888;stroke-width:2;rx:14} .arrow{stroke:#333;stroke-width:2;fill:none;marker-end:url(#a)} .small{font-size:16px}.title{font-size:24px;font-weight:700}.head{font-size:19px;font-weight:700}</style>
+<defs><marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L9,3 L0,6 z" fill="#333"/></marker></defs>
+<text x="40" y="38" class="title">FIN-LAB — Secure Three-Tier AWS Architecture</text>
+<rect x="30" y="65" width="1140" height="420" class="zone"/>
+<text x="50" y="95" class="head">VPC 10.0.0.0/16 · us-east-1a / us-east-1b</text>
+<rect x="65" y="125" width="300" height="130" class="zone"/><text x="85" y="152" class="head">Public tier</text>
+<rect x="110" y="175" width="210" height="55" class="box"/><text x="145" y="208" class="head">Internet ALB :80</text>
+<rect x="450" y="125" width="300" height="130" class="zone"/><text x="470" y="152" class="head">Private application tier</text>
+<rect x="495" y="175" width="210" height="55" class="box"/><text x="525" y="208" class="head">EC2 :8080</text>
+<rect x="835" y="125" width="300" height="130" class="zone"/><text x="855" y="152" class="head">Private database tier</text>
+<rect x="880" y="175" width="210" height="55" class="box"/><text x="915" y="208" class="head">RDS MySQL :3306</text>
+<path d="M320 202 H490" class="arrow"/><text x="375" y="190" class="small">8080</text>
+<path d="M705 202 H875" class="arrow"/><text x="765" y="190" class="small">3306</text>
+<rect x="140" y="310" width="300" height="110" class="zone"/><text x="160" y="338" class="head">Private interface endpoints</text><text x="160" y="370" class="small">SSM · SSM Messages · EC2 Messages</text><text x="160" y="397" class="small">Secrets Manager · HTTPS 443</text>
+<rect x="505" y="310" width="300" height="110" class="zone"/><text x="525" y="338" class="head">S3 gateway endpoint</text><text x="525" y="370" class="small">Private application access</text><text x="525" y="397" class="small">Block Public Access + bucket policy</text>
+<rect x="870" y="310" width="240" height="110" class="box"/><text x="915" y="348" class="head">S3 bucket</text><text x="900" y="378" class="small">TLS / upload controls</text>
+<path d="M600 255 V305" class="arrow"/><path d="M660 365 H865" class="arrow"/>
+<text x="470" y="470" class="small">No NAT gateway · no SSH · private service access through VPC endpoints</text>
+</svg>
