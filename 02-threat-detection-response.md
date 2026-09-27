@@ -7,19 +7,34 @@ Detect a security-group ingress change that opens a service to the internet, pre
 ## Build steps
 
 ### 1. Enable CloudTrail logging
+
 Created the `fin-lab-trail` CloudTrail trail and delivered its logs to a versioned S3 bucket with log-file validation enabled.
 
+![CloudTrail logs archived to S3](images/evidence-cloudtrail-s3-logs.webp)
+
 ### 2. Match the security-group change
+
 The EventBridge rule `fin-lab-detect-open-sg` matches EC2 CloudTrail events with detail-type `AWS API Call via CloudTrail` and event name `AuthorizeSecurityGroupIngress`.
 
+![EventBridge rule](images/evidence-eventbridge-rule.webp)
+
 ### 3. Invoke the detection Lambda
+
 The matching event invokes `FIN-LAB-Lambda`, which evaluates the change and emits a structured finding to CloudWatch Logs.
 
-### 4. Prove the detection
+![Detection result in CloudWatch Logs](images/evidence-detection-finding.webp)
+
+### 4. Prove the detection with a controlled test
+
 A dedicated lab security group was opened on HTTP/80 to `0.0.0.0/0`. This was the final successful test case.
 
+![Controlled open-security-group test](images/evidence-test-security-group.webp)
+
 ### 5. Preserve actor and network context
+
 A CloudTrail event showed activity through `FIN-LAB-SSM-ROLE`, a private source address (`10.0.11.209`) and an SSM VPC endpoint. Sensitive account/access-key material was redacted from the evidence copy.
+
+![CloudTrail attribution evidence](images/evidence-cloudtrail-attribution.webp)
 
 ## What broke & fix
 
