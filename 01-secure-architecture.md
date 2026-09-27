@@ -4,31 +4,47 @@
 Secure a three-tier AWS application using network isolation, least-privilege access, private endpoints and encryption.
 
 ## Diagram
-![AWS secure architecture](images/diagram-architecture.svg)
-
-```mermaid
-flowchart TB
-    Internet --> IGW[Internet Gateway]
-    IGW --> ALB[Internet-facing ALB :80]
-    ALB -->|8080| EC2[Private EC2]
-    EC2 -->|3306| RDS[Private RDS MySQL]
-    EC2 -->|443| EP[Private interface endpoints]
-    EC2 --> S3EP[S3 gateway endpoint]
-    S3EP --> S3[Private S3 bucket]
-```
+![Three-tier application](images/diagram-3-tier-application.svg)
 
 ## Build steps
-| # | Step | Evidence |
-|---|---|---|
-| 1 | Build `FIN-LAB-VPC` with six subnets across `us-east-1a` and `us-east-1b`. Only the public tier uses the IGW; there is no NAT gateway. | VPC resource map |
-| 2 | Place the application EC2 instance in the private app subnet with no public IPv4 address, no key pair, IMDSv2 required and the `FIN-LAB-SSM-ROLE` IAM role. | Private EC2 |
-| 3 | Use private interface endpoints for SSM, Secrets Manager and related management traffic. Endpoint access is restricted to HTTPS from the app security group. | Network validation |
-| 4 | Put the internet-facing ALB in the public tier and forward HTTP/80 traffic to the application on port 8080. | ALB application proof |
-| 5 | Use private RDS MySQL on port 3306. IAM DB authentication is enabled and the master secret is managed by Secrets Manager. | RDS private connectivity |
-| 6 | Add the S3 gateway endpoint, Block Public Access and bucket-policy controls for TLS and upload encryption. | S3 policy test |
-| 7 | Validate intended and denied paths with connectivity tests and Reachability Analyzer. | Reachability Analyzer |
+
+### 1. Build the VPC and subnet tiers
+Created `FIN-LAB-VPC` with public, private-app and private-db subnets across two AZs. Only the public route table has the default route to the internet gateway.
+
+![VPC resource map](images/evidence-vpc-resource-map.webp)
+
+### 2. Deploy the private application instance
+The application instance has no public IP and is managed through SSM rather than SSH. IMDSv2 is required and the SSM IAM role is attached.
+
+![Private EC2 evidence](images/evidence-private-ec2.webp)
+
+### 3. Make the application reachable without exposing the instance
+The internet-facing ALB accepts HTTP/80 and forwards to the private application on port 8080. The Python service was started with systemd and the target became healthy.
+
+![ALB application proof](images/evidence-alb-app-proof.webp)
+
+### 4. Keep database access private
+RDS MySQL is not public, is encrypted, uses IAM DB authentication and is reachable from the application security group on port 3306.
+
+![Private RDS evidence](images/evidence-rds-private.webp)
+
+### 5. Add private AWS service access
+SSM and Secrets Manager use interface endpoints; S3 uses a gateway endpoint. The application security group controls HTTPS access to the endpoint security group.
+
+![Network validation](images/evidence-network-validation.webp)
+
+### 6. Apply storage controls
+The S3 bucket has Block Public Access and bucket-policy controls. The final validation allowed the intended plain upload and denied the tested KMS-encrypted upload.
+
+![S3 policy test](images/evidence-s3-policy-test.webp)
+
+### 7. Validate intended and denied paths
+Connectivity testing and Reachability Analyzer were used to prove the security boundaries.
+
+![Reachability validation](images/evidence-reachability-summary.webp)
 
 ## What broke & fix
+
 | Issue | Root cause | Fix |
 |---|---|---|
 | SSM was not connected | App SG had no HTTPS egress to the endpoint SG. | Added TCP/443 egress to the endpoint SG. |
@@ -37,6 +53,7 @@ flowchart TB
 | S3 policy denied normal uploads | Earlier conditions treated a missing encryption header as a denial. | Iterated the condition logic until plain upload was allowed while the tested KMS upload was denied. |
 
 ## Proof
+
 - **Blocked:** direct internet access, EC2 API access and DB port `22`.
 - **Open:** DB `3306`, SSM `443`, Secrets Manager `443` and S3 `443`.
 - Interface endpoints resolved to private `10.0.x.x` addresses.
