@@ -1,71 +1,97 @@
 # 01 — Secure Three-Tier AWS Architecture
 
 ## Goal
-Secure a three-tier AWS application using network isolation, least-privilege access, private endpoints and encryption.
 
-## Diagram
-![Three-tier application](images/diagram-3-tier-application.svg)
+Build a three-tier AWS application with public ingress at the load balancer while keeping the application and database layers private. The design uses security-group-to-security-group rules, VPC endpoints for private AWS service access, least-privilege IAM and explicit connectivity validation.
 
 ## Build steps
 
 ### 1. Build the VPC and subnet tiers
-Created `FIN-LAB-VPC` with public, private-app and private-db subnets across two AZs. Only the public route table has the default route to the internet gateway.
 
-![VPC resource map](images/evidence-vpc-resource-map.webp)
+Created `FIN-LAB-VPC` (`10.0.0.0/16`) across `us-east-1a` and `us-east-1b` with two public subnets, two private application subnets and two private database subnets. Each tier has its own route table. Only the public route table has `0.0.0.0/0` to `FIN-LAB-igw`; no NAT gateway is used.
 
-### 2. Deploy the private application instance
-The application instance has no public IP and is managed through SSM rather than SSH. IMDSv2 is required and the SSM IAM role is attached.
+![VPC resource map and route-table evidence](images/evidence-vpc-resource-map.webp)
 
-![Private EC2 evidence](images/evidence-private-ec2.webp)
+### 2. Keep the application instance private
 
-### 3. Make the application reachable without exposing the instance
-The internet-facing ALB accepts HTTP/80 and forwards to the private application on port 8080. The Python service was started with systemd and the target became healthy.
+`FIN-LAB-APP-Private` runs in the private application tier with no public IPv4 address, no key pair, IMDSv2 required and the `FIN-LAB-SSM-ROLE` role. The instance is managed through Systems Manager rather than SSH.
 
-![ALB application proof](images/evidence-alb-app-proof.webp)
+![Private EC2 configuration](images/evidence-private-ec2.webp)
 
-### 4. Keep database access private
-RDS MySQL is not public, is encrypted, uses IAM DB authentication and is reachable from the application security group on port 3306.
+### 3. Provide private access to AWS management and secret services
 
-![Private RDS evidence](images/evidence-rds-private.webp)
+Added VPC interface endpoints for `ssm`, `ssmmessages`, `ec2messages` and Secrets Manager. Endpoint security-group ingress is limited to HTTPS (`443`) from the application security group.
 
-### 5. Add private AWS service access
-SSM and Secrets Manager use interface endpoints; S3 uses a gateway endpoint. The application security group controls HTTPS access to the endpoint security group.
+The validation run from the instance shows the intended distinction: direct internet and EC2 API access are blocked, while SSM, Secrets Manager and S3 resolve and connect through private paths.
 
-![Network validation](images/evidence-network-validation.webp)
+![Private endpoint and network validation](images/evidence-network-validation.webp)
 
-### 6. Apply storage controls
-The S3 bucket has Block Public Access and bucket-policy controls. The final validation allowed the intended plain upload and denied the tested KMS-encrypted upload.
+### 4. Expose only the load balancer publicly
 
-![S3 policy test](images/evidence-s3-policy-test.webp)
+The ALB is internet-facing in the public subnets and listens on HTTP/80. It forwards to `fin-lab-app-tg` on port `8080`. The application security group allows `8080` only from the ALB security group.
+
+![ALB successfully serving the private application](images/evidence-alb-app-proof.webp)
+
+### 5. Keep the database private and restrict access to the app tier
+
+`fin-lab-db` is an encrypted RDS MySQL instance in the private DB subnet group across both AZs. It is not public, IAM DB authentication is enabled and the RDS-managed master secret is stored in Secrets Manager. The DB security group allows `3306` only from the application security group.
+
+![Private RDS and IAM DB authentication](images/evidence-rds-private.webp)
+
+### 6. Keep application data on private S3 paths
+
+The application uses an S3 gateway endpoint. The bucket has Block Public Access enabled and bucket-policy controls covering TLS and upload encryption behavior.
+
+The final test allowed the normal upload path and denied the tested `--sse aws:kms` request.
+
+![S3 policy enforcement test](images/evidence-s3-policy-test.webp)
 
 ### 7. Validate intended and denied paths
-Connectivity testing and Reachability Analyzer were used to prove the security boundaries.
 
-![Reachability validation](images/evidence-reachability-summary.webp)
+Reachability Analyzer was used to test the two security questions that matter to the design: can the private application reach the database on `3306`, and can the internet gateway reach the private application on `22`?
+
+The observed results were `app-to-db-3306` **Reachable** and `igw-to-app-22` **Not reachable**. The denied internet-to-private path was explained by both private-IP ingress limitations and the absence of a matching security-group ingress rule.
+
+![Reachability Analyzer validation](images/evidence-reachability-summary.webp)
 
 ## What broke & fix
 
-| Issue | Root cause | Fix |
-|---|---|---|
-| SSM was not connected | App SG had no HTTPS egress to the endpoint SG. | Added TCP/443 egress to the endpoint SG. |
-| Secrets Manager failed at network level, then with `AccessDenied` | No endpoint initially; then no IAM permission. | Added the endpoint and a one-ARN `GetSecretValue` policy. |
-| ALB target was unhealthy | Nothing was listening on port 8080. | Created and enabled the `finlab-web` systemd service. |
-| S3 policy denied normal uploads | Earlier conditions treated a missing encryption header as a denial. | Iterated the condition logic until plain upload was allowed while the tested KMS upload was denied. |
+### SSM was initially not connected
 
-## Proof
+The agent could not reach the private SSM endpoint because the application security group had no HTTPS egress to the endpoint security group. Adding TCP/443 egress to the endpoint SG restored the path.
 
-- **Blocked:** direct internet access, EC2 API access and DB port `22`.
-- **Open:** DB `3306`, SSM `443`, Secrets Manager `443` and S3 `443`.
+### Secrets Manager failed in two different ways
+
+The first failure was network-level because the endpoint did not exist. After the endpoint was added, the request reached the service but returned `AccessDenied` because the role had no permission. The fix was a one-ARN `secretsmanager:GetSecretValue` policy on `FIN-LAB-SSM-ROLE`.
+
+### The ALB target was unhealthy
+
+The load balancer had no healthy backend because nothing was listening on port `8080`. A small Python web server was created as a `systemd` service on the private instance. Once the service was active, the ALB returned the application page.
+
+![ALB application proof](images/evidence-alb-app-proof.webp)
+
+### The first S3 bucket-policy condition was too broad
+
+The first policy version used `StringNotEquals`, which treated the missing encryption header as a mismatch and denied normal uploads. A second attempt with `StringNotEqualsIfExists` still did not produce the required behavior. The final logic used a `Null: false` guard together with `StringNotEquals`, allowing the plain upload and denying the tested KMS upload.
+
+![Final S3 behavior](images/evidence-s3-policy-test.webp)
+
+## Security proof
+
+- **Blocked:** direct internet access, direct EC2 API access and DB `22`.
+- **Allowed:** DB `3306`, SSM `443`, Secrets Manager `443` and S3 `443`.
 - Interface endpoints resolved to private `10.0.x.x` addresses.
-- Reachability Analyzer showed `app-to-db-3306` **Reachable** and `igw-to-app-22` **Not reachable**.
-- The ALB served the application while the application instance remained private.
-- Plain S3 upload succeeded; the tested `--sse aws:kms` upload was denied by the bucket policy.
+- `app-to-db-3306` was **Reachable**.
+- `igw-to-app-22` was **Not reachable**.
+- The ALB served the application without giving the EC2 instance a public IP.
+- Plain S3 upload succeeded while the tested `--sse aws:kms` upload was denied.
 
 ## Lab vs production
-| Lab | Production |
+
+| Lab | Production hardening |
 |---|---|
 | One EC2 instance | Auto Scaling across two AZs |
-| Single-AZ RDS | Multi-AZ RDS |
-| HTTP only | ACM certificate, HTTPS and WAF |
-| No VPC Flow Logs; backups disabled | VPC Flow Logs and backups with PITR |
-| Manual console configuration using root | Terraform, IAM Identity Center and no root usage |
+| RDS lab topology | Multi-AZ database configuration |
+| HTTP-only ALB | ACM TLS, HTTPS and WAF |
+| No VPC Flow Logs in the lab | VPC Flow Logs, backups and PITR |
+| Manual console configuration | Infrastructure as code and centralized identity |
