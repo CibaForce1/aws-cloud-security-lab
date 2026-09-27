@@ -4,32 +4,45 @@
 Detect security-group ingress changes that expose a service to the internet, create an actionable finding and define a response path.
 
 ## Diagram
-![AWS threat detection pipeline](images/diagram-detection.svg)
-
-```mermaid
-flowchart TB
-    API[AuthorizeSecurityGroupIngress] --> CT[CloudTrail]
-    CT --> EB[EventBridge]
-    EB --> L[Lambda]
-    L --> CW[CloudWatch finding]
-    CW --> IR[Response runbook]
-```
+![Threat detection pipeline](images/diagram-aws-lab-overview.svg)
 
 ## Build steps
-| # | Step | Evidence |
-|---|---|---|
-| 1 | Send CloudTrail activity to an S3 bucket with versioning and log-file validation. | CloudTrail log bucket |
-| 2 | Match EC2 CloudTrail events with `AuthorizeSecurityGroupIngress`. | EventBridge rule |
-| 3 | Route matching events to `FIN-LAB-Lambda`, which emits a structured finding to CloudWatch Logs. | Detection finding |
-| 4 | Test with the lab security group opened to the internet. The final successful test used HTTP/80 from `0.0.0.0/0`. | Test security group |
-| 5 | Use CloudTrail attribution to identify the actor, source and VPC endpoint context. | CloudTrail attribution |
+
+### 1. Enable CloudTrail logging
+CloudTrail records API activity and delivers the trail logs to the versioned S3 log bucket with log-file validation enabled.
+
+![CloudTrail evidence](images/evidence-cloudtrail-s3-logs.webp)
+
+### 2. Match the security-group API event
+The EventBridge rule matches the EC2 CloudTrail event `AuthorizeSecurityGroupIngress`.
+
+![EventBridge rule](images/evidence-eventbridge-rule.webp)
+
+### 3. Send the event to Lambda
+The matched event invokes `FIN-LAB-Lambda`, which analyzes the security-group rule and writes a structured finding.
+
+![Detection build](images/evidence-detection-build.webp)
+
+### 4. Trigger the detection with an exposed test rule
+The test security group was opened to HTTP/80 from `0.0.0.0/0`.
+
+![Test security group](images/evidence-test-security-group.webp)
+
+### 5. Verify the finding and attribution
+The Lambda produced a HIGH-severity finding. CloudTrail was then used to investigate actor and endpoint context.
+
+![Finding](images/evidence-detection-finding.webp)
+
+![CloudTrail attribution](images/evidence-cloudtrail-attribution.webp)
 
 ## What broke & fix
+
 | Issue | Root cause | Fix / lesson |
 |---|---|---|
 | Initial SSH/22 test produced no finding | The EventBridge Enhanced builder silently failed to save the intended rule. | Rebuilt the rule with the Advanced builder and retested. A detection that has never fired is a hypothesis. |
 
 ## Proof
+
 ```json
 {
   "finding": "SECURITY_GROUP_OPENED_TO_INTERNET",
@@ -40,9 +53,8 @@ flowchart TB
 }
 ```
 
-A separate CloudTrail event showed the application using `FIN-LAB-SSM-ROLE`, a private source address and an SSM VPC endpoint.
-
 **Response runbook**
+
 1. **Triage:** Identify the affected resource, actor and approval status.
 2. **Contain:** Revoke unauthorized ingress and preserve the CloudTrail record.
 3. **Escalate:** Investigate root-user activity as a separate finding.
